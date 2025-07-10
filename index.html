@@ -116,12 +116,12 @@
 
     <script>
         const config = {
-            // IMPORTANT: Replace with your Google Sheet ID
+            // Get your Sheet ID from the URL of your Google Sheet
             sheetId: '1pZ7KKoCN6jdvcpNUIdR903X_eyDXJN0aEoXR1T85F8U', 
-            // IMPORTANT: Replace with your Google Sheets API Key
+            // Get this from your Google Cloud Console under "APIs & Services > Credentials"
             apiKey: 'AIzaSyAA8HGLU2R0txJLZE3Wta7nwLKB-unKuXg', 
             sheetName: 'Sheet1',
-            // IMPORTANT: Replace with your Google Cloud Function Trigger URL
+            // Get this from the main page of your Cloud Run service
             cloudFunctionUrl: 'https://visitgermany-backend-946705852775.europe-west3.run.app' 
         };
 
@@ -277,13 +277,24 @@
             
             renderBaseCards(currentPhrases);
 
-            if (config.cloudFunctionUrl === 'YOUR_CLOUD_FUNCTION_TRIGGER_URL_HERE') {
-                console.error("Please update the 'cloudFunctionUrl' in the script config.");
+            if (config.cloudFunctionUrl === 'YOUR_NEW_CLOUD_RUN_URL_HERE') {
+                errorEl.style.display = 'block';
+                errorEl.querySelector('p').textContent = 'Error: Please update the cloudFunctionUrl in the index.html file.';
                 return;
             }
 
             fetchAndPopulateTranslations(currentPhrases, lang1SelectEl.value, 'lang1-box', 'lang1-text');
             fetchAndPopulateTranslations(currentPhrases, lang2SelectEl.value, 'lang2-box', 'lang2-text');
+        }
+
+        function populateCategoryFilter() {
+            const sortedCategories = [...categories].sort();
+            sortedCategories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                categoryFilterEl.appendChild(option);
+            });
         }
 
         function populateLanguageDropdowns() {
