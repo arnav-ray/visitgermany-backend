@@ -28,7 +28,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: var(--font-primary); line-height: 1.7; color: var(--text-color); background-color: var(--bg-color); }
         .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        
+
         header { text-align: center; margin-bottom: 40px; }
         header h1 { color: var(--header-text-color); font-family: var(--font-headings); font-size: 2.8em; margin-bottom: 10px; font-weight: 700; }
         header p { color: var(--subtle-text-color); font-size: 1.25em; max-width: 750px; margin: 0 auto; }
@@ -48,16 +48,16 @@
         .search-input:focus { outline: none; border-color: var(--primary-accent); box-shadow: 0 0 0 4px rgba(54, 124, 255, 0.2); }
         .filter-group { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
         .language-select, .category-filter { padding: 15px 20px; border-radius: 50px; border: 1px solid var(--border-color); background-color: #fff; font-size: 1.1em; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238492a6' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 1rem center; padding-right: 2.5rem; }
-        
+
         .phrase-cards-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 25px; }
         .phrase-card { background: var(--card-bg-color); border-radius: 16px; box-shadow: 0 5px 20px var(--shadow-color); padding: 25px; display: flex; flex-direction: column; gap: 20px; transition: transform 0.2s ease, box-shadow 0.2s ease; }
         .phrase-card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(44, 62, 80, 0.15); }
-        
+
         .german-section { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; }
         .german-phrase { font-size: 1.4em; font-weight: 600; color: var(--header-text-color); line-height: 1.4; }
         .audio-btn { background: var(--secondary-accent); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 1.5em; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; flex-shrink: 0; }
         .audio-btn:hover { background: #25a97a; transform: scale(1.1); }
-        
+
         .english-translation { font-size: 1.1em; color: var(--subtle-text-color); font-style: italic; }
         .translation-divider { border: 0; height: 1px; background-image: linear-gradient(to right, rgba(0, 0, 0, 0), var(--border-color), rgba(0, 0, 0, 0)); }
 
@@ -69,7 +69,7 @@
         .lang1-text { color: var(--lang1-accent); }
         .lang2-text { color: var(--lang2-accent); }
         .lang-box .loader { font-size: 0.9em; color: var(--subtle-text-color); }
-        
+
         .content-card { background-color: var(--card-bg-color); padding: 30px 40px; border-radius: 16px; box-shadow: 0 5px 20px var(--shadow-color); }
         #loading, #error, #no-results { text-align: center; padding: 60px; font-size: 1.2em; color: var(--subtle-text-color); }
     </style>
@@ -115,15 +115,10 @@
     </div>
 
     <script>
-        const config = {
-            // Get your Sheet ID from the URL of your Google Sheet
-            sheetId: '1pZ7KKoCN6jdvcpNUIdR903X_eyDXJN0aEoXR1T85F8U', 
-            // Get this from your Google Cloud Console under "APIs & Services > Credentials"
-            apiKey: 'AIzaSyAA8HGLU2R0txJLZE3Wta7nwLKB-unKuXg', 
-            sheetName: 'Sheet1',
-            // Get this from the main page of your Cloud Run service
-            cloudFunctionUrl: 'https://visitgermany-backend-946705852775.europe-west3.run.app' 
-        };
+        // Backend URL only — no API keys in client-side code.
+        // The backend proxies Google Sheets and Google Translate,
+        // keeping all credentials server-side in environment variables.
+        const BACKEND_URL = window.BACKEND_URL || '';
 
         const supportedLanguages = {
             'hi': 'Hindi', 'bn': 'Bengali', 'mr': 'Marathi', 'gu': 'Gujarati',
@@ -150,90 +145,119 @@
             setupEventListeners();
             populateLanguageDropdowns();
             try {
-                const data = await fetchSheetData();
-                allPhrases = parseSheetData(data.values);
+                const data = await fetchPhrases();
+                allPhrases = data;
                 if (allPhrases.length > 0) {
                     populateCategoryFilter();
                     filterAndDisplayPhrases();
                     loadingEl.style.display = 'none';
                 } else {
-                    throw new Error("No 'Published' phrases found in the sheet.");
+                    throw new Error('No published phrases found.');
                 }
             } catch (err) {
-                console.error("Initialization Error:", err);
+                console.error('Initialization Error:', err);
                 loadingEl.style.display = 'none';
                 errorEl.style.display = 'block';
-                errorEl.querySelector('p').textContent = `Error: ${err.message}`;
+                // Do not leak internal error details to the DOM
+                errorEl.querySelector('p').textContent = 'Could not load phrases. Please try again later.';
             }
         });
 
-        async function fetchSheetData() {
-            const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.sheetId}/values/${config.sheetName}?key=${config.apiKey}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        // Fetches phrases from the backend /phrases endpoint (no API key in browser)
+        async function fetchPhrases() {
+            const response = await fetch(`${BACKEND_URL}/phrases`);
+            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
             return response.json();
         }
 
-        function parseSheetData(rows) {
-            if (!rows || rows.length < 2) return [];
-            const headers = rows[0].map(h => h.trim());
-            const requiredHeaders = ['German_Phrase_Clean', 'Color_Coded_German', 'English_Translation', 'Category', 'Status'];
-            const headerIndices = {};
-            requiredHeaders.forEach(h => headerIndices[h] = headers.indexOf(h));
+        // Safe DOM builder — never uses innerHTML for data from the server.
+        // Returns a phrase card element with all text set via textContent.
+        function buildCard(p, index, lang1Code, lang2Code) {
+            const lang1Name = supportedLanguages[lang1Code];
+            const lang2Name = supportedLanguages[lang2Code];
 
-            const parsedData = [];
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                if (row[headerIndices.Status] === 'Published') {
-                    const phrase = {
-                        germanClean: row[headerIndices.German_Phrase_Clean],
-                        germanStyled: row[headerIndices.Color_Coded_German],
-                        english: row[headerIndices.English_Translation],
-                        category: row[headerIndices.Category],
-                    };
-                    parsedData.push(phrase);
-                    categories.add(phrase.category);
-                }
-            }
-            return parsedData;
+            const card = document.createElement('div');
+            card.className = 'phrase-card';
+            card.dataset.index = index;
+
+            // German section
+            const germanSection = document.createElement('div');
+            germanSection.className = 'german-section';
+
+            const germanPhrase = document.createElement('div');
+            germanPhrase.className = 'german-phrase';
+            // Use textContent — never innerHTML — to prevent XSS from sheet data
+            germanPhrase.textContent = p.germanClean;
+
+            const audioBtn = document.createElement('button');
+            audioBtn.className = 'audio-btn';
+            audioBtn.setAttribute('aria-label', 'Play audio');
+            audioBtn.textContent = '🔊';
+            audioBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                speak(p.germanClean);
+            });
+
+            germanSection.appendChild(germanPhrase);
+            germanSection.appendChild(audioBtn);
+
+            // English translation
+            const englishDiv = document.createElement('div');
+            englishDiv.className = 'english-translation';
+            englishDiv.textContent = p.english;
+
+            // Divider
+            const divider = document.createElement('hr');
+            divider.className = 'translation-divider';
+
+            // Language grid
+            const langGrid = document.createElement('div');
+            langGrid.className = 'language-grid';
+
+            const lang1Box = document.createElement('div');
+            lang1Box.className = 'lang-box';
+            lang1Box.id = `lang1-box-${index}`;
+            const lang1Title = document.createElement('h3');
+            lang1Title.className = 'lang1-text';
+            lang1Title.textContent = lang1Name;
+            const lang1Loader = document.createElement('div');
+            lang1Loader.className = 'loader';
+            lang1Loader.textContent = 'Loading...';
+            lang1Box.appendChild(lang1Title);
+            lang1Box.appendChild(lang1Loader);
+
+            const lang2Box = document.createElement('div');
+            lang2Box.className = 'lang-box';
+            lang2Box.id = `lang2-box-${index}`;
+            const lang2Title = document.createElement('h3');
+            lang2Title.className = 'lang2-text';
+            lang2Title.textContent = lang2Name;
+            const lang2Loader = document.createElement('div');
+            lang2Loader.className = 'loader';
+            lang2Loader.textContent = 'Loading...';
+            lang2Box.appendChild(lang2Title);
+            lang2Box.appendChild(lang2Loader);
+
+            langGrid.appendChild(lang1Box);
+            langGrid.appendChild(lang2Box);
+
+            card.appendChild(germanSection);
+            card.appendChild(englishDiv);
+            card.appendChild(divider);
+            card.appendChild(langGrid);
+
+            return card;
         }
 
         function renderBaseCards(phrases) {
             cardsContainerEl.innerHTML = '';
             noResultsEl.style.display = phrases.length === 0 ? 'block' : 'none';
-            
+
             const lang1Code = lang1SelectEl.value;
             const lang2Code = lang2SelectEl.value;
-            const lang1Name = supportedLanguages[lang1Code];
-            const lang2Name = supportedLanguages[lang2Code];
 
             phrases.forEach((p, index) => {
-                const card = document.createElement('div');
-                card.className = 'phrase-card';
-                card.dataset.index = index;
-                card.innerHTML = `
-                    <div class="german-section">
-                        <div class="german-phrase">${p.germanStyled}</div>
-                        <button class="audio-btn" aria-label="Play audio">🔊</button>
-                    </div>
-                    <div class="english-translation">${p.english}</div>
-                    <hr class="translation-divider">
-                    <div class="language-grid">
-                        <div class="lang-box" id="lang1-box-${index}">
-                            <h3 class="lang1-text">${lang1Name}</h3>
-                            <div class="loader">Loading...</div>
-                        </div>
-                        <div class="lang-box" id="lang2-box-${index}">
-                            <h3 class="lang2-text">${lang2Name}</h3>
-                            <div class="loader">Loading...</div>
-                        </div>
-                    </div>
-                `;
-                card.querySelector('.audio-btn').addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    speak(p.germanClean);
-                });
-                cardsContainerEl.appendChild(card);
+                cardsContainerEl.appendChild(buildCard(p, index, lang1Code, lang2Code));
             });
         }
 
@@ -244,21 +268,41 @@
                 if (!box) continue;
 
                 try {
-                    const response = await fetch(config.cloudFunctionUrl, {
+                    const response = await fetch(`${BACKEND_URL}/translate`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ text: p.germanClean, targetLang: langCode })
                     });
                     if (!response.ok) throw new Error('API request failed');
                     const data = await response.json();
-                    
-                    box.innerHTML = `
-                        <h3 class="${textClass}">${supportedLanguages[langCode]}</h3>
-                        <div class="translation ${textClass}">${data.translation}</div>
-                        <div class="pronunciation">${data.phonetic}</div>
-                    `;
+
+                    // Build translation box safely — no innerHTML with server data
+                    box.innerHTML = '';
+                    const title = document.createElement('h3');
+                    title.className = textClass;
+                    title.textContent = supportedLanguages[langCode];
+
+                    const translationDiv = document.createElement('div');
+                    translationDiv.className = `translation ${textClass}`;
+                    translationDiv.textContent = data.translation;
+
+                    const pronunciationDiv = document.createElement('div');
+                    pronunciationDiv.className = 'pronunciation';
+                    pronunciationDiv.textContent = data.phonetic;
+
+                    box.appendChild(title);
+                    box.appendChild(translationDiv);
+                    box.appendChild(pronunciationDiv);
                 } catch (err) {
-                    box.innerHTML = `<h3 class="${textClass}">${supportedLanguages[langCode]}</h3><div class="loader">Error loading.</div>`;
+                    box.innerHTML = '';
+                    const title = document.createElement('h3');
+                    title.className = textClass;
+                    title.textContent = supportedLanguages[langCode];
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'loader';
+                    errDiv.textContent = 'Error loading.';
+                    box.appendChild(title);
+                    box.appendChild(errDiv);
                     console.error(`Failed to fetch translation for "${p.germanClean}" to ${langCode}:`, err);
                 }
             }
@@ -274,15 +318,8 @@
                     p.english.toLowerCase().includes(searchTerm);
                 return matchesCategory && matchesSearch;
             });
-            
+
             renderBaseCards(currentPhrases);
-
-            if (config.cloudFunctionUrl === 'YOUR_NEW_CLOUD_RUN_URL_HERE') {
-                errorEl.style.display = 'block';
-                errorEl.querySelector('p').textContent = 'Error: Please update the cloudFunctionUrl in the index.html file.';
-                return;
-            }
-
             fetchAndPopulateTranslations(currentPhrases, lang1SelectEl.value, 'lang1-box', 'lang1-text');
             fetchAndPopulateTranslations(currentPhrases, lang2SelectEl.value, 'lang2-box', 'lang2-text');
         }
@@ -311,7 +348,7 @@
                 el.addEventListener('input', filterAndDisplayPhrases);
                 el.addEventListener('change', filterAndDisplayPhrases);
             });
-            
+
             navTabs.forEach(tab => {
                 tab.addEventListener('click', () => {
                     navTabs.forEach(t => t.classList.remove('active'));
